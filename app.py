@@ -49,6 +49,7 @@ def process_single_pdf(pdf_path, idx, total_pdfs):
             processed_image = preprocess_image(image)
             page_text = ocr_with_timeout(processed_image)
             full_text += page_text[:5000] + ' '
+        logger.info(f"Extracted text from {filename}: {full_text[:200]}...")  # Log the first 200 chars
         return (filename, full_text)
     except Exception as e:
         logger.error(f'Error processing {filename}: {e}')
@@ -92,7 +93,13 @@ def index():
 
             if len(pdf_texts) > 1:
                 texts = [text for _, text in pdf_texts]
-                vectorizer = TfidfVectorizer(max_features=5000)
+                # Check if all texts are empty or invalid
+                if not any(text.strip() for text in texts):
+                    logger.error("All extracted texts are empty or invalid.")
+                    return render_template('index.html', error='No meaningful text extracted from PDFs. Please check the PDF content.')
+
+                # Use a more lenient TfidfVectorizer
+                vectorizer = TfidfVectorizer(max_features=5000, stop_words=None, lowercase=False, token_pattern=r'(?u)\b\w+\b')
                 tfidf_matrix = vectorizer.fit_transform(texts)
 
                 num_clusters = min(10, len(pdf_texts) // 5 + 1)

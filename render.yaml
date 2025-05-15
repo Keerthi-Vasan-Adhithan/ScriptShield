@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: scriptshield
+    env: python
+    plan: free
+    buildCommand: "pip install --upgrade pip && apt-get update && apt-get install -y tesseract-ocr poppler-utils && pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: TESSDATA_PREFIX
+        value: /usr/share/tesseract-ocr/5/tessdata

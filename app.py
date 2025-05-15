@@ -33,7 +33,7 @@ def preprocess_image(image):
     return image.convert('L')
 
 def ocr_with_timeout(image):
-    future = executor.submit(pytesseract.image_to_string, image)
+    future = executor.submit(pytesseract.image_to_string, image, lang='eng')
     try:
         return future.result(timeout=30)
     except TimeoutError:
@@ -44,12 +44,12 @@ def process_single_pdf(pdf_path, idx, total_pdfs):
     filename = os.path.basename(pdf_path)
     full_text = ''
     try:
-        images = convert_from_path(pdf_path, first_page=1, last_page=2, dpi=100)
+        images = convert_from_path(pdf_path, first_page=1, last_page=2, dpi=200)
         for image in images:
             processed_image = preprocess_image(image)
             page_text = ocr_with_timeout(processed_image)
             full_text += page_text[:5000] + ' '
-        logger.info(f"Extracted text from {filename}: {full_text[:200]}...")  # Log the first 200 chars
+        logger.info(f"Extracted text from {filename}: {full_text[:200]}...")
         return (filename, full_text)
     except Exception as e:
         logger.error(f'Error processing {filename}: {e}')
@@ -59,15 +59,18 @@ def process_single_pdf(pdf_path, idx, total_pdfs):
 def index():
     if request.method == 'POST':
         files = request.files.getlist('files')
+        logger.info(f"Received {len(files)} files: {[file.filename for file in files if file]}")
         if not files:
             return render_template('index.html', error='No files uploaded.')
 
         pdf_paths = []
         for file in files:
-            if file and file.filename.endswith('.pdf'):
+            if file and file.filename.lower().endswith('.pdf'):
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
                 file.save(file_path)
                 pdf_paths.append(file_path)
+            else:
+                logger.warning(f"File {file.filename if file else 'None'} is not a PDF or is invalid.")
 
         if not pdf_paths:
             return render_template('index.html', error='No valid PDF files uploaded.')
@@ -93,12 +96,10 @@ def index():
 
             if len(pdf_texts) > 1:
                 texts = [text for _, text in pdf_texts]
-                # Check if all texts are empty or invalid
                 if not any(text.strip() for text in texts):
                     logger.error("All extracted texts are empty or invalid.")
                     return render_template('index.html', error='No meaningful text extracted from PDFs. Please check the PDF content.')
 
-                # Use a more lenient TfidfVectorizer
                 vectorizer = TfidfVectorizer(max_features=5000, stop_words=None, lowercase=False, token_pattern=r'(?u)\b\w+\b')
                 tfidf_matrix = vectorizer.fit_transform(texts)
 
